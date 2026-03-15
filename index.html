@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Worttiger</title>
+  <link rel="stylesheet" href="style.css" />
+
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+  <div class="topbar-left">
+    <h1>Worttiger</h1>
+    <p class="subtitle">
+      Löse pro Spiel nacheinander 4 Wörter: 7, 6, 5 und 4 Buchstaben.
+    </p>
+  </div>
+
+  <div class="topbar-right">
+    <div class="mini-auth">
+      <button id="registerBtn" type="button" class="secondary">Reg.</button>
+      <button id="loginBtn" type="button" class="secondary">Login</button>
+      <button id="logoutBtn" type="button" class="secondary">Logout</button>
+
+      <input id="usernameInput" type="text" placeholder="Benutzername" autocomplete="username" />
+      <input id="passwordInput" type="password" placeholder="Passwort" autocomplete="current-password" />
+
+      <span id="authStatus" class="mini-auth-status">Nicht eingeloggt</span>
+    </div>
+
+    <div class="controls">
+      <button id="newGameBtn">Neues Spiel</button>
+      <button id="revealBtn" class="secondary">Lösung zeigen</button>
+    </div>
+  </div>
+</header>
+    <section class="statusbar" id="status">Lade Wortlisten …</section>
+
+    <main class="layout">
+      <section class="panel main-panel">
+        <div class="board-title">
+          <div>
+            <h2 id="boardTitle">Aktuelles Wort</h2>
+            <p id="boardSubtitle">6 Versuche</p>
+          </div>
+          <p id="gameInfo">Spiel 1</p>
+        </div>
+
+        <div class="timers">
+          <div class="chip">Wortzeit: <span id="wordTimer">00:00</span></div>
+          <div class="chip">Spielzeit: <span id="gameTimer">00:00</span></div>
+          <div class="chip">Punkte: <span id="totalPoints">0</span></div>
+        </div>
+
+        <div class="board-wrap">
+          <div id="board" class="grid"></div>
+        </div>
+
+        <div class="continue-wrap">
+          <button id="continueBtn" class="continue-btn">Weiter</button>
+        </div>
+
+        <div id="wordResult" class="word-result"></div>
+
+        <section id="keyboard" class="keyboard"></section>
+      </section>
+
+      <aside class="sidebar">
+        <section class="panel">
+          <div class="panel-inner">
+            <h3>Abfolge</h3>
+            <div id="steps" class="steps"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-inner">
+            <h3>Aktuelles Spiel</h3>
+            <div id="currentGameSummary" class="summary-list"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-inner">
+            <h3>Letzte 10 Spiele</h3>
+            <div id="historyList" class="history-list"></div>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</body>
+</html>
