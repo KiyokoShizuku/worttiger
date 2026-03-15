@@ -862,6 +862,25 @@ function revealCurrentSolution() {
   setStatus(`Aktuelle Lösung (${length} Buchstaben)`, displayWord(solution));
 }
 
+function giveUpCurrentRound() {
+  if (appState.isAwaitingContinue || appState.gameFinished || appState.isRevealing || !isViewingCurrentBoard()) {
+    return;
+  }
+
+  const board = getCurrentBoard();
+  if (!board || board.solved || board.failed) return;
+
+  const confirmed = window.confirm("Wirklich aufgeben?");
+  if (!confirmed) return;
+
+  board.failed = true;
+  board.currentTiles = Array(board.length).fill("");
+  appState.cursorIndex = 0;
+
+  finalizeFailedWord();
+}
+
+
 function persistFinishedGame(won) {
   const gameElapsedMs = nowMs() - appState.gameStartedAt;
 
@@ -1082,7 +1101,41 @@ function renderContinueArea() {
   button.classList.toggle("visible", appState.isAwaitingContinue || appState.gameFinished);
   button.textContent = appState.gameFinished ? "Neues Spiel" : "Weiter";
 
-  if ((appState.isAwaitingContinue || appState.gameFinished) && currentBoard?.stats) {
+  if (appState.gameFinished) {
+    const totalPoints = appState.completedWords.reduce((sum, item) => sum + item.points, 0);
+    const solvedRounds = appState.completedWords.filter((item) => item.solved).length;
+    const totalTimeMs = nowMs() - appState.gameStartedAt;
+
+    result.classList.add("visible");
+    result.innerHTML = `
+      <h3>Spiel abgeschlossen</h3>
+      <div class="result-grid">
+        <div class="stat-card">
+          <small>Gesamtpunkte</small>
+          <strong>${totalPoints}</strong>
+        </div>
+        <div class="stat-card">
+          <small>Gesamtzeit</small>
+          <strong>${msToClock(totalTimeMs)}</strong>
+        </div>
+        <div class="stat-card">
+          <small>Gelöste Runden</small>
+          <strong>${solvedRounds} / 4</strong>
+        </div>
+        <div class="stat-card">
+          <small>Aktuelle Serie</small>
+          <strong>${appState.userStats.currentStreak}</strong>
+        </div>
+        <div class="stat-card">
+          <small>Beste Serie</small>
+          <strong>${appState.userStats.bestStreak}</strong>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (appState.isAwaitingContinue && currentBoard?.stats) {
     const totalPoints = appState.completedWords.reduce((sum, item) => sum + item.points, 0);
     const roundText = currentBoard.stats.solved ? "Runde geschafft" : "Runde nicht geschafft";
 
@@ -1090,10 +1143,22 @@ function renderContinueArea() {
     result.innerHTML = `
       <h3>${roundText}: ${displayWord(currentBoard.stats.solution)}</h3>
       <div class="result-grid">
-        <div class="stat-card"><small>Zeit für diese Runde</small><strong>${msToClock(currentBoard.stats.wordElapsedMs)}</strong></div>
-        <div class="stat-card"><small>Versuche</small><strong>${currentBoard.stats.attemptsUsed}</strong></div>
-        <div class="stat-card"><small>Punkte</small><strong>${currentBoard.stats.points}</strong></div>
-        <div class="stat-card"><small>Spielpunkte gesamt</small><strong>${totalPoints}</strong></div>
+        <div class="stat-card">
+          <small>Zeit für diese Runde</small>
+          <strong>${msToClock(currentBoard.stats.wordElapsedMs)}</strong>
+        </div>
+        <div class="stat-card">
+          <small>Versuche</small>
+          <strong>${currentBoard.stats.attemptsUsed}</strong>
+        </div>
+        <div class="stat-card">
+          <small>Punkte</small>
+          <strong>${currentBoard.stats.points}</strong>
+        </div>
+        <div class="stat-card">
+          <small>Spielpunkte gesamt</small>
+          <strong>${totalPoints}</strong>
+        </div>
       </div>
     `;
     return;
@@ -1340,7 +1405,7 @@ document.getElementById("logoutBtn").addEventListener("click", logoutUser);
 
 
 document.getElementById("newGameBtn").addEventListener("click", () => startNewGame(true));
-document.getElementById("revealBtn").addEventListener("click", revealCurrentSolution);
+document.getElementById("giveUpBtn").addEventListener("click", giveUpCurrentRound);
 document.getElementById("continueBtn").addEventListener("click", () => {
   if (appState.gameFinished) {
     startNewGame(true);

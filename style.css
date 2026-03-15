@@ -165,7 +165,14 @@ button.secondary {
   background: #2c2d30;
   color: white;
 }
+button.danger {
+  background: #c86f78;
+  color: white;
+}
 
+button.danger:hover {
+  background: #d37982;
+}
 .panel,
 .statusbar {
   background: var(--panel);
