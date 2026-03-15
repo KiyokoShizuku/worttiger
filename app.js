@@ -330,59 +330,75 @@ function getCurrentUsername() {
   );
 }
 
-function getUserStatsStorageKey() {
-  if (!appState.currentUser?.id) return null;
-  return `worttiger_user_stats_${appState.currentUser.id}`;
+function resetUserStats() {
+  appState.userStats = {
+    currentStreak: 0,
+    bestStreak: 0,
+  };
 }
 
-function loadUserStats() {
-  const key = getUserStatsStorageKey();
+async function ensureUserStatsRow() {
+  if (!appState.currentUser?.id) return;
 
-  if (!key) {
-    appState.userStats = {
-      currentStreak: 0,
-      bestStreak: 0,
-    };
+  const { error } = await sb.from("user_stats").upsert(
+    {
+      user_id: appState.currentUser.id,
+      current_streak: 0,
+      best_streak: 0,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" }
+  );
+
+  if (error) {
+    console.error("ensureUserStatsRow error:", error);
+  }
+}
+
+async function loadUserStats() {
+  if (!appState.currentUser?.id) {
+    resetUserStats();
     return;
   }
 
-  try {
-    const raw = localStorage.getItem(key);
+  await ensureUserStatsRow();
 
-    if (!raw) {
-      appState.userStats = {
-        currentStreak: 0,
-        bestStreak: 0,
-      };
-      return;
-    }
+  const { data, error } = await sb
+    .from("user_stats")
+    .select("current_streak, best_streak")
+    .eq("user_id", appState.currentUser.id)
+    .single();
 
-    const parsed = JSON.parse(raw);
-
-    appState.userStats = {
-      currentStreak: Number(parsed.currentStreak || 0),
-      bestStreak: Number(parsed.bestStreak || 0),
-    };
-  } catch (error) {
+  if (error) {
     console.error("loadUserStats error:", error);
-    appState.userStats = {
-      currentStreak: 0,
-      bestStreak: 0,
-    };
+    resetUserStats();
+    return;
   }
+
+  appState.userStats = {
+    currentStreak: Number(data?.current_streak || 0),
+    bestStreak: Number(data?.best_streak || 0),
+  };
+
+  render();
 }
 
-function saveUserStats() {
-  const key = getUserStatsStorageKey();
-  if (!key) return;
+async function saveUserStats() {
+  if (!appState.currentUser?.id) return;
 
-  localStorage.setItem(
-    key,
-    JSON.stringify({
-      currentStreak: appState.userStats.currentStreak,
-      bestStreak: appState.userStats.bestStreak,
-    })
+  const { error } = await sb.from("user_stats").upsert(
+    {
+      user_id: appState.currentUser.id,
+      current_streak: appState.userStats.currentStreak,
+      best_streak: appState.userStats.bestStreak,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" }
   );
+
+  if (error) {
+    console.error("saveUserStats error:", error);
+  }
 }
 
 function registerSolvedRoundForStreak() {
@@ -429,7 +445,7 @@ async function refreshCurrentUser() {
   }
 
   appState.currentUser = user;
-  loadUserStats();
+  await loadUserStats();
 
   const username =
     user.user_metadata?.username ||
@@ -504,10 +520,7 @@ async function logoutUser() {
   }
 
   appState.currentUser = null;
-  appState.userStats = {
-    currentStreak: 0,
-    bestStreak: 0,
-  };
+  resetUserStats();
   setAuthStatus("Nicht eingeloggt");
   render();
 }
@@ -518,12 +531,8 @@ sb.auth.onAuthStateChange((_event, session) => {
 
   if (!user) {
     appState.currentUser = null;
-    appState.userStats = {
-      currentStreak: 0,
-      bestStreak: 0,
-    };
+    resetUserStats();
     setAuthStatus("Nicht eingeloggt");
-
     if (WORDS && appState.boards && Object.keys(appState.boards).length) {
       render();
     }
@@ -531,7 +540,6 @@ sb.auth.onAuthStateChange((_event, session) => {
   }
 
   appState.currentUser = user;
-  loadUserStats();
 
   const username =
     user.user_metadata?.username ||
@@ -540,9 +548,9 @@ sb.auth.onAuthStateChange((_event, session) => {
 
   setAuthStatus(`Eingeloggt als ${username}`);
 
-  if (WORDS && appState.boards && Object.keys(appState.boards).length) {
-    render();
-  }
+  Promise.resolve().then(async () => {
+    await loadUserStats();
+  });
 });
 
 function newGameState() {
