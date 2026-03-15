@@ -1120,9 +1120,14 @@ function renderKeyboard() {
     rowChars.forEach((char) => {
       const key = document.createElement("button");
       key.className = "key";
-      if (char === "enter" || char === "backspace") key.classList.add("wide");
+      if (window.innerWidth > 640 && (char === "enter" || char === "backspace")) {
+        key.classList.add("wide");
+      }
 
-      key.textContent = char === "backspace" ? "⌫" : displayChar(char);
+      key.textContent =
+        char === "backspace" ? "⌫" :
+        char === "enter" ? "⏎" :
+        displayChar(char);
       const state = appState.keyboard[char];
       if (state) key.classList.add(state);
 

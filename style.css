@@ -624,17 +624,16 @@ button.secondary {
   .key-row {
     display: grid;
     width: 100%;
-    justify-content: stretch;
     gap: 4px;
   }
 
-  .key-row:nth-child(1),
+    .key-row:nth-child(1),
   .key-row:nth-child(2) {
     grid-template-columns: repeat(11, minmax(0, 1fr));
   }
 
   .key-row:nth-child(3) {
-    grid-template-columns: 1.5fr repeat(8, minmax(0, 1fr)) 1.5fr;
+    grid-template-columns: 1.6fr repeat(7, minmax(0, 1fr)) 1.6fr;
   }
 
   .key {
