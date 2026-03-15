@@ -367,20 +367,18 @@ async function ensureUserStatsRow(userId) {
   }
 }
 
-async function loadUserStats(userId = appState.currentUser?.id) {
+async function loadUserStats(userId) {
   if (!userId) {
     resetUserStats();
     render();
     return;
   }
 
-  await ensureUserStatsRow(userId);
-
   const { data, error } = await sb
     .from("user_stats")
     .select("current_streak, best_streak")
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("loadUserStats error:", error);
@@ -389,19 +387,39 @@ async function loadUserStats(userId = appState.currentUser?.id) {
     return;
   }
 
-  if (appState.currentUser?.id !== userId) {
+  if (!data) {
+    const { error: insertError } = await sb.from("user_stats").insert({
+      user_id: userId,
+      current_streak: 0,
+      best_streak: 0,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (insertError) {
+      console.error("loadUserStats insert error:", insertError);
+      resetUserStats();
+      render();
+      return;
+    }
+
+    appState.userStats = {
+      currentStreak: 0,
+      bestStreak: 0,
+    };
+    render();
     return;
   }
 
   appState.userStats = {
-    currentStreak: Number(data?.current_streak || 0),
-    bestStreak: Number(data?.best_streak || 0),
+    currentStreak: Number(data.current_streak || 0),
+    bestStreak: Number(data.best_streak || 0),
   };
 
   render();
 }
 
-async function saveUserStats(userId = appState.currentUser?.id) {
+async function saveUserStats() {
+  const userId = appState.currentUser?.id;
   if (!userId) return;
 
   const { error } = await sb.from("user_stats").upsert(
@@ -416,12 +434,14 @@ async function saveUserStats(userId = appState.currentUser?.id) {
 
   if (error) {
     console.error("saveUserStats error:", error);
+    return;
   }
+
+  await loadUserStats(userId);
 }
 
 async function registerSolvedRoundForStreak() {
-  const userId = appState.currentUser?.id;
-  if (!userId) return;
+  if (!appState.currentUser?.id) return;
 
   appState.userStats.currentStreak += 1;
 
@@ -429,26 +449,20 @@ async function registerSolvedRoundForStreak() {
     appState.userStats.bestStreak = appState.userStats.currentStreak;
   }
 
-  await saveUserStats(userId);
-  render();
+  await saveUserStats();
 }
 
 async function registerFailedRoundForStreak() {
-  const userId = appState.currentUser?.id;
-  if (!userId) return;
+  if (!appState.currentUser?.id) return;
 
   appState.userStats.currentStreak = 0;
-  await saveUserStats(userId);
-  render();
+  await saveUserStats();
 }
 
 async function refreshCurrentUser() {
   setAuthStatus("Nicht eingeloggt");
   appState.currentUser = null;
-  appState.userStats = {
-    currentStreak: 0,
-    bestStreak: 0,
-  };
+  resetUserStats();
 
   const { data, error } = await sb.auth.getUser();
 
@@ -460,6 +474,7 @@ async function refreshCurrentUser() {
     }
 
     setAuthStatus("Nicht eingeloggt");
+    render();
     return null;
   }
 
@@ -467,11 +482,11 @@ async function refreshCurrentUser() {
 
   if (!user) {
     setAuthStatus("Nicht eingeloggt");
+    render();
     return null;
   }
 
   appState.currentUser = user;
-  await loadUserStats(user.id);
 
   const username =
     user.user_metadata?.username ||
@@ -479,6 +494,8 @@ async function refreshCurrentUser() {
     "Benutzer";
 
   setAuthStatus(`Eingeloggt als ${username}`);
+
+  await loadUserStats(user.id);
   return user;
 }
 
@@ -520,7 +537,7 @@ async function loginWithEmail() {
 
   const email = usernameToEmail(username);
 
-  const { data, error } = await sb.auth.signInWithPassword({
+  const { error } = await sb.auth.signInWithPassword({
     email,
     password,
   });
@@ -531,9 +548,7 @@ async function loginWithEmail() {
     return;
   }
 
-  appState.currentUser = data.user || null;
-  loadUserStats();
-  setAuthStatus(`Eingeloggt als ${username}`);
+  await refreshCurrentUser();
 }
 
 async function logoutUser() {
@@ -559,6 +574,7 @@ sb.auth.onAuthStateChange((_event, session) => {
     appState.currentUser = null;
     resetUserStats();
     setAuthStatus("Nicht eingeloggt");
+
     if (WORDS && appState.boards && Object.keys(appState.boards).length) {
       render();
     }
@@ -573,9 +589,6 @@ sb.auth.onAuthStateChange((_event, session) => {
     "Benutzer";
 
   setAuthStatus(`Eingeloggt als ${username}`);
-
-  const stableUserId = user.id;
-  Promise.resolve().then(() => loadUserStats(stableUserId));
 });
 
 function newGameState() {
