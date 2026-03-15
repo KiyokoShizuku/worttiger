@@ -337,41 +337,59 @@ function resetUserStats() {
   };
 }
 
-async function ensureUserStatsRow() {
-  if (!appState.currentUser?.id) return;
+async function ensureUserStatsRow(userId) {
+  if (!userId) return;
 
-  const { error } = await sb.from("user_stats").upsert(
-    {
-      user_id: appState.currentUser.id,
-      current_streak: 0,
-      best_streak: 0,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" }
-  );
+  const { data, error } = await sb
+    .from("user_stats")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
 
   if (error) {
-    console.error("ensureUserStatsRow error:", error);
-  }
-}
-
-async function loadUserStats() {
-  if (!appState.currentUser?.id) {
-    resetUserStats();
+    console.error("ensureUserStatsRow select error:", error);
     return;
   }
 
-  await ensureUserStatsRow();
+  if (data) {
+    return;
+  }
+
+  const { error: insertError } = await sb.from("user_stats").insert({
+    user_id: userId,
+    current_streak: 0,
+    best_streak: 0,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (insertError) {
+    console.error("ensureUserStatsRow insert error:", insertError);
+  }
+}
+
+async function loadUserStats(userId = appState.currentUser?.id) {
+  if (!userId) {
+    resetUserStats();
+    render();
+    return;
+  }
+
+  await ensureUserStatsRow(userId);
 
   const { data, error } = await sb
     .from("user_stats")
     .select("current_streak, best_streak")
-    .eq("user_id", appState.currentUser.id)
+    .eq("user_id", userId)
     .single();
 
   if (error) {
     console.error("loadUserStats error:", error);
     resetUserStats();
+    render();
+    return;
+  }
+
+  if (appState.currentUser?.id !== userId) {
     return;
   }
 
@@ -383,12 +401,12 @@ async function loadUserStats() {
   render();
 }
 
-async function saveUserStats() {
-  if (!appState.currentUser?.id) return;
+async function saveUserStats(userId = appState.currentUser?.id) {
+  if (!userId) return;
 
   const { error } = await sb.from("user_stats").upsert(
     {
-      user_id: appState.currentUser.id,
+      user_id: userId,
       current_streak: appState.userStats.currentStreak,
       best_streak: appState.userStats.bestStreak,
       updated_at: new Date().toISOString(),
@@ -401,19 +419,27 @@ async function saveUserStats() {
   }
 }
 
-function registerSolvedRoundForStreak() {
+async function registerSolvedRoundForStreak() {
+  const userId = appState.currentUser?.id;
+  if (!userId) return;
+
   appState.userStats.currentStreak += 1;
 
   if (appState.userStats.currentStreak > appState.userStats.bestStreak) {
     appState.userStats.bestStreak = appState.userStats.currentStreak;
   }
 
-  saveUserStats();
+  await saveUserStats(userId);
+  render();
 }
 
-function registerFailedRoundForStreak() {
+async function registerFailedRoundForStreak() {
+  const userId = appState.currentUser?.id;
+  if (!userId) return;
+
   appState.userStats.currentStreak = 0;
-  saveUserStats();
+  await saveUserStats(userId);
+  render();
 }
 
 async function refreshCurrentUser() {
@@ -445,7 +471,7 @@ async function refreshCurrentUser() {
   }
 
   appState.currentUser = user;
-  await loadUserStats();
+  await loadUserStats(user.id);
 
   const username =
     user.user_metadata?.username ||
@@ -548,9 +574,8 @@ sb.auth.onAuthStateChange((_event, session) => {
 
   setAuthStatus(`Eingeloggt als ${username}`);
 
-  Promise.resolve().then(async () => {
-    await loadUserStats();
-  });
+  const stableUserId = user.id;
+  Promise.resolve().then(() => loadUserStats(stableUserId));
 });
 
 function newGameState() {
@@ -685,7 +710,7 @@ function finishGame(won) {
   saveLocalProgress();
 }
 
-function finalizeSolvedWord() {
+async function finalizeSolvedWord() {
   const length = getCurrentLength();
   const board = getCurrentBoard();
   const wordElapsedMs = nowMs() - appState.activeWordStartedAt;
@@ -702,7 +727,7 @@ function finalizeSolvedWord() {
 
   board.stats = stats;
   appState.completedWords.push(stats);
-  registerSolvedRoundForStreak();
+  await registerSolvedRoundForStreak();
   appState.currentWordCompletedAt = nowMs();
   appState.viewingLength = length;
 
@@ -717,7 +742,7 @@ function finalizeSolvedWord() {
   saveLocalProgress();
 }
 
-function finalizeFailedWord() {
+async function finalizeFailedWord() {
   const length = getCurrentLength();
   const board = getCurrentBoard();
   const wordElapsedMs = nowMs() - appState.activeWordStartedAt;
@@ -733,7 +758,7 @@ function finalizeFailedWord() {
 
   board.stats = stats;
   appState.completedWords.push(stats);
-  registerFailedRoundForStreak();
+  await registerFailedRoundForStreak();
   appState.currentWordCompletedAt = nowMs();
   appState.viewingLength = length;
 
@@ -783,16 +808,16 @@ function submitGuess() {
     setKeyboardState(char, evaluation[index]);
   });
 
-  runRevealAnimation(length, rowIndex, () => {
+  runRevealAnimation(length, rowIndex, async () => {
     if (guess === solution) {
       board.solved = true;
-      finalizeSolvedWord();
+      await finalizeSolvedWord();
       return;
     }
 
     if (board.guesses.length >= ATTEMPTS) {
       board.failed = true;
-      finalizeFailedWord();
+      await finalizeFailedWord();
       return;
     }
 
